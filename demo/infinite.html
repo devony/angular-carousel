@@ -61,7 +61,7 @@
     <script>
     /* demo page code */
     angular.module('myApp', ['angular-carousel'])
-      .controller('demoController', function($scope, $http, $q) {
+      .controller('demoController', function($scope, $http, $q, $timeout) {
        
         // infinite carousel stuff
         var currentDay = (new Date()),
@@ -87,8 +87,8 @@
         $scope.pages.push(addPage());
         $scope.pages.push(addPage());
         $scope.pages.push(addPage());
-        $scope.pages.push(addPage());
-        $scope.pages.push(addPage());
+        //$scope.pages.push(addPage());
+        //$scope.pages.push(addPage());
         // $scope.pages.push(addPage());
         // $scope.pages.push(addPage());
         // $scope.pages.push(addPage());
@@ -96,6 +96,8 @@
 
         $scope.getSlide = function(index, item, direction) {
           // generate n new slides
+          // we can send one or more items
+          // with promises, or not
           var itemCount = 3;
           var items = [];
           for (var i = 0; i < itemCount; i++) {
@@ -107,7 +109,16 @@
             });
           };
           if (direction < 0) items.reverse();
-          return items;
+
+          //return items;
+
+          // sample promise
+          var defer = $q.defer();
+
+          $timeout(function() {
+              defer.resolve(items);
+          }, 2000);
+          return defer;
         };
 
       })

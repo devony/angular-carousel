@@ -102,17 +102,66 @@ angular.module('angular-carousel', ['ngMobile'])
           }
 
           function isRightEdge() {
-            /* check if we reached the buffer right edge and its not the last item in collection */
-            var isLastCollectionItem = (scope.totalIndex === (getSlidesCount() - 1)),
-                isLastActiveItem = scope.activeIndex === (carousel.find('li').length - 1);
-            return (isLastActiveItem && !isLastCollectionItem);
+            /* check if we reached the buffer right edge */
+            var isLastActiveItem = scope.activeIndex === (carousel.find('li').length - 1);
+            return isLastActiveItem;
+            // && !isLastCollectionItem);
           }
 
+          var collectionModifiers = {
+            /* add slided before/after for the bufferef carousel */
+            add: function(action, items) {
+              /* action is append or prepend */
+              if (items) {
+                /* add returned slides at the end of the collection */
+                if (angular.isObject(items.promise)) {
+                  items.promise.then(function(items) {
+                    collectionModifiers[action](items);
+                  });
+                } else {
+                  collectionModifiers[action](items);
+                }
+              }
+            },
+            append: function(items) {
+              /* append items to the current collection */
+              if (angular.isArray(items)) {
+                scope.carouselItems = scope.carouselItems.concat(items);
+              } else {
+                scope.carouselItems.push(items);
+              }
+            },
+            prepend: function(items) {
+              /* prepend items to the current collection and update indexes accordingly */
+              initialPosition = true;
+              var itemsOffset = 1;
+              if (angular.isArray(items)) {
+                itemsOffset = items.length;
+                scope.carouselItems = items.concat(scope.carouselItems);
+              } else {
+                scope.carouselItems.splice(0, 0, items);
+              }
+              scope.carouselBufferStart -= itemsOffset;
+              scope.totalIndex += itemsOffset;
+              updateActiveIndex();
+
+              // this should be called only if we're NOT inside an digest cycle
+              if(!scope.$$phase) {
+                updateSlidePosition();
+              }
+            }
+          };
+
           function transitionEndCallback() {
-            /* when carousel transition is finished,
+            checkEdges();
+          }
+
+          function checkEdges(transitioned) {
+            /* check carousel edges :
                 - check if we need to update the DOM (add/remove slides)
-                - check if we need to call callbacks to get new slides
+                - check if we need to use callbacks to get new slides
             */
+            if (!isBuffered) return;
             var slidesInCache = false;
             if (isRightEdge()) {
               scope.$apply(function() {
@@ -126,15 +175,8 @@ angular.module('angular-carousel', ['ngMobile'])
                   index: (scope.totalIndex + 1),
                   item: scope.carouselItems[scope.carouselItems.length-1]
                 });
-                if (slidesAfter) {
-                  /* add returned slides at the end of the collection */
-                  // todo: handle promises
-                  if (angular.isArray(slidesAfter)) {
-                    scope.carouselItems = scope.carouselItems.concat(slidesAfter);
-                  } else {
-                    scope.carouselItems.push(slidesAfter);
-                  }
-                }
+                /* add returned slides at the end of the collection */
+                collectionModifiers.add('append', slidesAfter);
               }
             }
             if (isLeftEdge()) {
@@ -149,23 +191,8 @@ angular.module('angular-carousel', ['ngMobile'])
                   index: 0,
                   item: scope.carouselItems[0]
                 });
-
-                /* add returned slides at the end of the collection and offset current indexes */
-                if (slidesBefore) {
-                  scope.$apply(function() {
-                    initialPosition = true;
-                    var itemsOffset = 1;
-                    if (angular.isArray(slidesBefore)) {
-                      itemsOffset = slidesBefore.length;
-                      scope.carouselItems = slidesBefore.concat(scope.carouselItems);
-                    } else {
-                      scope.carouselItems.splice(0, 0, slidesBefore);
-                    }
-                    scope.carouselBufferStart -= itemsOffset;
-                    scope.totalIndex += itemsOffset;
-                    updateActiveIndex();
-                  });
-                }
+                /* add returned slides at the beginning of the collection */
+                collectionModifiers.add('prepend', slidesBefore);
               }
             }
           }
@@ -245,8 +272,8 @@ angular.module('angular-carousel', ['ngMobile'])
                 - update container width based on first item width
             */
             scope.carouselItems = newValue;
-            var slides = carousel.find('li');
             if (containerWidth === 0) {
+              var slides = carousel.find('li');
               if (slides.length === 0) {
                 containerWidth = carousel[0].getBoundingClientRect().width;
               } else {

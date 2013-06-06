@@ -343,7 +343,7 @@ describe('carousel', function () {
   describe('swipe buffered behaviour', function () {
     it('should follow multiple moves and buffer accordingly', function() {
         var elm = compileTpl({useBuffer: true});
-        fakeMove(elm, -30);
+        fakeMove(elm, -100);
         fakeMove(elm, -200);
         fakeMove(elm, -300);
         expect(elm.find('li').length).toBe(elm.scope().carouselBufferSize);
