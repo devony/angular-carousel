@@ -1,6 +1,6 @@
 /**
  * Angular Carousel - Mobile friendly touch carousel for AngularJS
- * @version v0.0.8 - 2013-06-07
+ * @version v0.0.8 - 2013-06-08
  * @link http://revolunet.github.com/angular-carousel
  * @author Julien Bouquillon <julien@revolunet.com>
  * @license MIT License, http://www.opensource.org/licenses/MIT
@@ -53,14 +53,14 @@ angular.module('angular-carousel', ['ngMobile'])
 
           carousels++;
           var carouselId = 'rn-carousel-' + carousels,
-              swiping = 0,
-              startX = 0,
-              startOffset  = 0,
-              offset  = 0,
-              minSwipePercentage = 0.1,
-              containerWidth = 0,
-              initialPosition = true,
-              restoredPosition = false;
+              swiping = 0,                    // swipe status
+              startX = 0,                     // initial swipe
+              startOffset  = 0,               // first move offset
+              offset  = 0,                    // move offset
+              minSwipePercentage = 0.1,       // minimum swipe required to trigger slide change
+              containerWidth = null,          // store width of the first slide
+              initialPosition = true,         // flag to detect initial status
+              restoredPosition = false;       // flag to detect if slide really changed or has been restored
 
           /* add a wrapper div that will hide the overflow */
           var carousel = iElement.wrap("<div id='" + carouselId +"' class='rn-carousel-container'></div>"),
@@ -95,7 +95,6 @@ angular.module('angular-carousel', ['ngMobile'])
             });
           }
 
-         //var edgeDistance = 1; // how many slides to trigger edge detection
           function isLeftEdge() {
             /* check if we reached buffer left edge and we're not at the first item in collection */
             return (scope.totalIndex > 0 && scope.activeIndex === 0);
@@ -105,7 +104,6 @@ angular.module('angular-carousel', ['ngMobile'])
             /* check if we reached the buffer right edge */
             var isLastActiveItem = scope.activeIndex === (carousel.find('li').length - 1);
             return isLastActiveItem;
-            // && !isLastCollectionItem);
           }
 
           var collectionModifiers = {
@@ -142,8 +140,7 @@ angular.module('angular-carousel', ['ngMobile'])
                 scope.carouselItems.splice(0, 0, items);
               }
               scope.carouselBufferStart -= itemsOffset;
-              scope.totalIndex += itemsOffset;
-              updateActiveIndex();
+              setTotalIndex(scope.totalIndex + itemsOffset);
 
               // this should be called only if we're NOT inside an digest cycle
               if(!scope.$$phase) {
@@ -153,7 +150,27 @@ angular.module('angular-carousel', ['ngMobile'])
           };
 
           function transitionEndCallback() {
-            checkEdges();
+            if (restoredPosition) return;
+            scope.$apply(function() {
+              checkEdges();
+            });
+          }
+
+          function setBufferStartIndex(index, updatePosition) {
+            /* update start buffer index and ensures its not out of bounds */
+            if (!isBuffered) return;
+            var maxIndex = getSlidesCount() - scope.carouselBufferSize,
+                oldIndex = scope.carouselBufferStart;
+            scope.carouselBufferStart = Math.max(0, Math.min(index, maxIndex));
+            if (updatePosition && scope.carouselBufferStart!==oldIndex) updateCarouselPadding();
+          }
+
+          function setTotalIndex(index) {
+            /* update start buffer index and ensures its not out of bounds */
+            // if no index given, just to validation
+            if (index===null) index = scope.totalIndex;
+            var maxIndex = (containerWidth===null)?Number.MAX_VALUE:getSlidesCount()-1;
+            scope.totalIndex = Math.max(0, Math.min(maxIndex, index));
           }
 
           function checkEdges(transitioned) {
@@ -164,10 +181,9 @@ angular.module('angular-carousel', ['ngMobile'])
             if (!isBuffered) return;
             var slidesInCache = false;
             if (isRightEdge()) {
-              scope.$apply(function() {
-                scope.carouselBufferStart += 1;
-                updateCarouselPadding();
-              });
+          //    if (!restoredPosition) {
+                setBufferStartIndex(scope.carouselBufferStart + 1, true);
+           //   };
               /* check if we really need to use the callback to get more slides */
               slidesInCache = (getSlidesCount() - 1 > scope.totalIndex + 1);
               if (!slidesInCache && angular.isDefined(iAttrs.rnCarouselNext)) {
@@ -180,10 +196,9 @@ angular.module('angular-carousel', ['ngMobile'])
               }
             }
             if (isLeftEdge()) {
-              scope.$apply(function() {
-                scope.carouselBufferStart -= 1;
-                updateCarouselPadding();
-              });
+            //  if (!restoredPosition){
+              setBufferStartIndex(scope.carouselBufferStart - 1, true);
+             // };
               /* check if we really need to use the callback to get more slides */
               slidesInCache = (scope.carouselBufferStart > 0);
               if (!slidesInCache && angular.isDefined(iAttrs.rnCarouselPrev)) {
@@ -238,30 +253,23 @@ angular.module('angular-carousel', ['ngMobile'])
                   indexModel.assign(scope.$parent, newValue);
                 });
                 scope.$parent.$watch(indexModel, function(newValue, oldValue) {
-                  scope.totalIndex = Math.max(0, newValue);
+                  setTotalIndex(newValue);
                 });
               } else if (!isNaN(iAttrs.rnCarouselIndex)) {
                 /* if user just set an initial number, set it */
-                scope.totalIndex = Math.max(0, parseInt(iAttrs.rnCarouselIndex, 10));
+                setTotalIndex(parseInt(iAttrs.rnCarouselIndex, 10));
               }
           }
 
-          scope.$watch('totalIndex', function(newValue, oldValue) {
-            if (newValue!==oldValue) {
-              updateSlidePosition();
-            }
-            updateActiveIndex();
-          });
-
           scope.$watch(originalCollection, function(newValue, oldValue) {
-            /* when the whole original collection change
+            /* when the *whole* original collection change
                 - reset the carousel index and position
             */
             if (newValue!==oldValue) {
-              scope.totalIndex = 0;
+              setTotalIndex(0);
+              //scope.totalIndex = 0;
               if (isBuffered) {
-                scope.carouselBufferStart = 0;
-                updateCarouselPadding();
+                setBufferStartIndex(0, true);
               }
             }
           });
@@ -272,7 +280,7 @@ angular.module('angular-carousel', ['ngMobile'])
                 - update container width based on first item width
             */
             scope.carouselItems = newValue;
-            if (containerWidth === 0) {
+            if (containerWidth === null) {
               var slides = carousel.find('li');
               if (slides.length === 0) {
                 containerWidth = carousel[0].getBoundingClientRect().width;
@@ -283,6 +291,12 @@ angular.module('angular-carousel', ['ngMobile'])
               updateSlidePosition();
             }
           }, true);
+
+
+          scope.$watch('totalIndex', function(newValue, oldValue) {
+            updateSlidePosition();
+            updateActiveIndex();
+          });
 
           /* enable carousel indicator */
           if (angular.isDefined(iAttrs.rnCarouselIndicator)) {
@@ -295,32 +309,30 @@ angular.module('angular-carousel', ['ngMobile'])
               return scope.carouselItems.length;
           };
 
-          var updateSlidePosition = function() {
-            /* trigger carousel position update */
-            var skipAnimation = (initialPosition===true),
-                slidesCount = getSlidesCount();
-            /* check we're not out of bounds */
-            if (scope.totalIndex > slidesCount - 1) {
-              scope.totalIndex = slidesCount - 1;
-            }
-            if (scope.totalIndex < 0) {
-              scope.totalIndex = 0;
-            }
-            /* check if requested position is out of buffer */
+          function validateBufferPosition() {
+            /* ensure carouselBufferStart is correct */
+            var skipAnimation = false;
+            var slidesCount = getSlidesCount();
             if (isBuffered) {
-              if (
-                  (scope.totalIndex < scope.carouselBufferStart) || 
-                  (scope.totalIndex > (scope.carouselBufferStart + scope.carouselBufferSize - 1))
-                  ) {
-                  /* update carousel position without animating */
-                  scope.carouselBufferStart = Math.max(0, scope.totalIndex - 1);
-                  skipAnimation = true;
-                  updateCarouselPadding();
+              if (scope.totalIndex < scope.carouselBufferStart) {
+                skipAnimation = true;
+                setBufferStartIndex(0, true);
               }
-              var bufferStart = Math.max(0, Math.min(scope.carouselBufferStart, slidesCount - scope.carouselBufferSize));
-              /* ensure buffer start is never negative and never too high */
-              scope.carouselBufferStart = bufferStart;
+              if (scope.totalIndex > (scope.carouselBufferStart + scope.carouselBufferSize - 1)) {
+                skipAnimation = true;
+                setBufferStartIndex(scope.totalIndex - 1, true);
+              }
             }
+            return skipAnimation;
+          }
+
+          function updateSlidePosition() {
+            /* trigger carousel position update */
+
+            setTotalIndex(null);
+
+            // skip animation if buffer resetted, or initial setup
+            var skipAnimation = validateBufferPosition() || (initialPosition===true);
             offset = scope.totalIndex * -containerWidth;
             if (skipAnimation===true) {
                 carousel.addClass('rn-carousel-noanimate')
@@ -331,7 +343,7 @@ angular.module('angular-carousel', ['ngMobile'])
                     .css(translateSlideproperty(offset));
             }
             initialPosition = false;
-          };
+          }
 
           $swipe.bind(carousel, {
             /* use angular $swipe service */
@@ -377,14 +389,13 @@ angular.module('angular-carousel', ['ngMobile'])
                   tmpSlideIndex = scope.totalIndex;
                 }
                 var changed = (scope.totalIndex !== tmpSlideIndex);
-                
                 /* reset slide position if same slide (watch not triggered) */
                 if (!changed) {
                   restoredPosition = true,
                   updateSlidePosition();
                 } else {
                   scope.$apply(function() {
-                    scope.totalIndex = tmpSlideIndex;
+                    setTotalIndex(tmpSlideIndex);
                   });
                 }
               }

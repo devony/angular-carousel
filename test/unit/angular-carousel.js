@@ -29,7 +29,8 @@ describe('carousel', function () {
     var options = {
       useIndex: false,
       useIndicator: false,
-      useBuffer: false
+      useBuffer: false,
+      nbItems: 25
     };
     if (overrideOptions) angular.extend(options, overrideOptions);
     var sampleData = {
@@ -38,7 +39,7 @@ describe('carousel', function () {
         localIndex: 5
       }
     };
-    for (var i=0; i<25; i++) {
+    for (var i=0; i<options.nbItems; i++) {
       sampleData.scope.items.push({
         text: 'slide #' + i,
         id: i
@@ -362,6 +363,23 @@ describe('carousel', function () {
         expect(elm.scope().totalIndex).toBe(0);
     });
   });
+
+  // todo
+
+  // describe('swipe buffered + index behaviour', function () {
+  //   it('should initialise buffer correctly when index is set', function() {
+  //       var elm = compileTpl({useBuffer: true, useIndex: 'localIndex', nbItems: 5});
+  //       scope.localIndex = 2;
+  //       scope.$digest();
+
+  //       waits(500);
+
+  //       runs(function () {
+  //           expect(elm.scope().activeIndex).toBe(1);
+  //       });
+
+  //   });
+  // });
 
 
 });
